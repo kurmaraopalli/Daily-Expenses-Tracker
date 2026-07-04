@@ -804,10 +804,19 @@ async function changeTheme(themeName) {
   
   await dbPut('settings', { key: 'activeTheme', value: themeName });
   
+  // Update dropdown selector in settings modal
   const selector = document.getElementById('theme-selector');
   if (selector) {
     selector.value = themeName;
   }
+  
+  // Update sidebar theme picker dots
+  document.querySelectorAll('.theme-dot').forEach(dot => {
+    dot.classList.remove('active');
+    if (dot.getAttribute('data-theme') === themeName) {
+      dot.classList.add('active');
+    }
+  });
   
   updateChartsColorTheme();
 }

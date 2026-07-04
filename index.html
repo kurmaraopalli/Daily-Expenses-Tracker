@@ -84,6 +84,18 @@
           <button onclick="addNewCategory()" class="btn btn-primary btn-sm" style="padding: 0.25rem 0.5rem;"><i data-lucide="plus" style="width: 12px; height: 12px;"></i></button>
         </div>
       </div>
+
+      <!-- Theme Picker Widget -->
+      <div class="categories-widget" id="theme-picker-widget">
+        <div class="widget-title"><i data-lucide="palette" style="width: 14px; height: 14px;"></i> Color Theme</div>
+        <div class="theme-picker-row">
+          <button class="theme-dot active" data-theme="cosmic" onclick="changeTheme('cosmic')" title="Cosmic Violet" style="background: linear-gradient(135deg, #9d4edd, #00f5ff);"></button>
+          <button class="theme-dot" data-theme="emerald" onclick="changeTheme('emerald')" title="Emerald Mint" style="background: linear-gradient(135deg, #05ffc4, #ffaa00);"></button>
+          <button class="theme-dot" data-theme="cyberpunk" onclick="changeTheme('cyberpunk')" title="Cyberpunk Ruby" style="background: linear-gradient(135deg, #ff2a6d, #ff9e00);"></button>
+          <button class="theme-dot" data-theme="ocean" onclick="changeTheme('ocean')" title="Ocean Breeze" style="background: linear-gradient(135deg, #0088ff, #00f5ff);"></button>
+          <button class="theme-dot" data-theme="slate" onclick="changeTheme('slate')" title="Minimalist Slate" style="background: linear-gradient(135deg, #4f46e5, #64748b);"></button>
+        </div>
+      </div>
       
       <div class="sidebar-footer" style="display: flex; flex-direction: column; gap: 0.5rem;">
         <div style="display: flex; gap: 0.5rem;">
@@ -105,6 +117,9 @@
           <p id="view-subtitle">Overview of your monthly spending habits.</p>
         </div>
         <div class="header-actions">
+          <button onclick="exportToCSV()" class="btn btn-secondary">
+            <i data-lucide="file-spreadsheet"></i> Download Excel
+          </button>
           <button onclick="openOcrModal()" class="btn btn-accent">
             <i data-lucide="scan"></i> Scan Receipt
           </button>
@@ -278,7 +293,10 @@
             <input type="date" id="filter-date-start" class="select-filter" placeholder="Start Date" onchange="applyFilters()">
             <input type="date" id="filter-date-end" class="select-filter" placeholder="End Date" onchange="applyFilters()">
           </div>
-          <button onclick="clearAllFilters()" class="btn btn-secondary btn-sm"><i data-lucide="rotate-ccw" style="width:14px;height:14px;"></i> Reset</button>
+          <div style="display: flex; gap: 0.5rem;">
+            <button onclick="clearAllFilters()" class="btn btn-secondary btn-sm"><i data-lucide="rotate-ccw" style="width:14px;height:14px;"></i> Reset</button>
+            <button onclick="exportToCSV()" class="btn btn-accent btn-sm"><i data-lucide="file-spreadsheet" style="width:14px;height:14px;"></i> Excel</button>
+          </div>
         </div>
 
         <div class="table-container">

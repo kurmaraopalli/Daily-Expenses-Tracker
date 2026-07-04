@@ -1406,6 +1406,36 @@ body.desktop-app .form-control:focus {
   box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
 }
 
+/* Theme Picker Widget */
+.theme-picker-row {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.5rem 0 0.25rem;
+  justify-content: center;
+}
+
+.theme-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  outline: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.theme-dot:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.theme-dot.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 3px var(--primary), 0 4px 15px rgba(0, 0, 0, 0.4);
+  transform: scale(1.15);
+}
+
 /* Color Theme Modes Variable Overrides */
 body.theme-cosmic {
   --primary: #9d4edd;
