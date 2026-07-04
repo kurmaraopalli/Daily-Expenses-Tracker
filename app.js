@@ -14,14 +14,14 @@ let editingExpenseId = null;
 
 // Initial Seeding Data
 const DEFAULT_CATEGORIES = [
-  { id: 'cat-food', name: 'Food & Dining', color: '#10b981' },
-  { id: 'cat-groceries', name: 'Groceries', color: '#06b6d4' },
-  { id: 'cat-housing', name: 'Rent & Housing', color: '#8b5cf6' },
-  { id: 'cat-utilities', name: 'Utilities', color: '#f59e0b' },
-  { id: 'cat-entertainment', name: 'Entertainment', color: '#f43f5e' },
-  { id: 'cat-transport', name: 'Transportation', color: '#3b82f6' },
-  { id: 'cat-sub', name: 'Subscriptions', color: '#ec4899' },
-  { id: 'cat-misc', name: 'Miscellaneous', color: '#6b7280' }
+  { id: 'cat-food', name: 'Food & Dining', color: '#05ffc4' },
+  { id: 'cat-groceries', name: 'Groceries', color: '#00f5ff' },
+  { id: 'cat-housing', name: 'Rent & Housing', color: '#b388ff' },
+  { id: 'cat-utilities', name: 'Utilities', color: '#ffaa00' },
+  { id: 'cat-entertainment', name: 'Entertainment', color: '#ff2a6d' },
+  { id: 'cat-transport', name: 'Transportation', color: '#3a86ff' },
+  { id: 'cat-sub', name: 'Subscriptions', color: '#ff007f' },
+  { id: 'cat-misc', name: 'Miscellaneous', color: '#71717a' }
 ];
 
 const SAMPLE_TRANSACTIONS = [];
