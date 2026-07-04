@@ -1350,60 +1350,36 @@ tr:hover td {
   to { opacity: 1; }
 }
 
-/* Desktop-App Color Overrides */
+/* Desktop-App: deeper background, softer glass sidebar */
 body.desktop-app {
   --bg-primary: #050608;
   --bg-secondary: #0a0c12;
   --bg-tertiary: #10131b;
   --card-bg: rgba(14, 18, 30, 0.45);
-  --card-border: rgba(129, 140, 248, 0.14); /* Radiant Indigo Glass border */
-  --primary: #818cf8; /* Royal Indigo */
-  --primary-hover: #6366f1;
-  --primary-light: rgba(129, 140, 248, 0.15);
-  
-  background-image: 
-    radial-gradient(circle at 100% 0%, rgba(244, 63, 94, 0.15) 0%, transparent 45%),
-    radial-gradient(circle at 0% 100%, rgba(99, 102, 241, 0.18) 0%, transparent 50%),
-    radial-gradient(circle at 50% 50%, rgba(129, 140, 248, 0.04) 0%, transparent 65%);
 }
 
 body.desktop-app aside {
-  border-color: rgba(129, 140, 248, 0.16);
   background: rgba(10, 13, 22, 0.5);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.05);
 }
 
-body.desktop-app .card {
-  border-color: rgba(129, 140, 248, 0.12);
-}
-
 body.desktop-app .card:hover {
-  border-color: rgba(129, 140, 248, 0.35);
-  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4), 0 0 20px rgba(129, 140, 248, 0.1);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4), 0 0 20px var(--primary-light);
 }
 
 body.desktop-app .btn-primary {
   background: linear-gradient(135deg, var(--primary), var(--primary-hover));
-  box-shadow: 0 4px 15px -3px rgba(99, 102, 241, 0.4);
-}
-
-body.desktop-app .btn-primary:hover {
-  box-shadow: 0 8px 20px -3px rgba(99, 102, 241, 0.5);
 }
 
 body.desktop-app .nav-link.active {
-  background: linear-gradient(90deg, rgba(129, 140, 248, 0.12), transparent);
+  background: linear-gradient(90deg, var(--primary-light), transparent);
   border-left-color: var(--primary);
   color: var(--primary);
 }
 
-body.desktop-app .form-control {
-  border-color: rgba(129, 140, 248, 0.1);
-}
-
 body.desktop-app .form-control:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 /* Theme Picker Widget */
