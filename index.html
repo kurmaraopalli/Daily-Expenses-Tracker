@@ -6,6 +6,7 @@
   <title>Serverless Daily Expenses Tracker</title>
   <!-- Stylesheet -->
   <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.json">
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Chart.js CDN -->
@@ -18,11 +19,18 @@
   <div class="app-container">
     <!-- Sidebar Navigation -->
     <aside>
-      <div class="logo-container">
+      <div class="logo-container" style="margin-bottom: 1.5rem;">
         <div class="logo-icon">
           <i data-lucide="wallet"></i>
         </div>
         <div class="logo-text">SpendWise</div>
+      </div>
+      
+      <!-- Sync Status Widget -->
+      <div id="sync-status-badge" class="sync-badge offline" onclick="openSyncModal()">
+        <span class="sync-dot"></span>
+        <span id="sync-status-text">Local Mode</span>
+        <i data-lucide="settings" style="width: 12px; height: 12px; margin-left: auto;"></i>
       </div>
       
       <ul class="nav-menu">
@@ -79,11 +87,12 @@
       
       <div class="sidebar-footer" style="display: flex; flex-direction: column; gap: 0.5rem;">
         <div style="display: flex; gap: 0.5rem;">
-          <button onclick="exportData()" class="btn btn-secondary btn-sm" style="flex: 1;"><i data-lucide="download" style="width: 14px; height: 14px;"></i> Export</button>
-          <button onclick="triggerImport()" class="btn btn-secondary btn-sm" style="flex: 1;"><i data-lucide="upload" style="width: 14px; height: 14px;"></i> Import</button>
+          <button onclick="exportData()" class="btn btn-secondary btn-sm" style="flex: 1; padding: 0.4rem 0.25rem;"><i data-lucide="download" style="width: 12px; height: 12px;"></i> JSON</button>
+          <button onclick="exportToCSV()" class="btn btn-secondary btn-sm" style="flex: 1; padding: 0.4rem 0.25rem;"><i data-lucide="file-spreadsheet" style="width: 12px; height: 12px;"></i> Excel</button>
         </div>
+        <button onclick="triggerImport()" class="btn btn-secondary btn-sm" style="width: 100%;"><i data-lucide="upload" style="width: 14px; height: 14px;"></i> Import Backup / CSV</button>
         <button onclick="resetDatabase()" class="btn btn-danger btn-sm" style="width: 100%;"><i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Clear All Data</button>
-        <input type="file" id="import-file-input" class="hidden-file-input" accept=".json" onchange="importData(event)">
+        <input type="file" id="import-file-input" class="hidden-file-input" accept=".json,.csv" onchange="importData(event)">
       </div>
     </aside>
 
@@ -436,18 +445,29 @@
     </div>
   </div>
 
-  <!-- MODAL: Budget Setting -->
+  <!-- MODAL: Settings -->
   <div class="modal-overlay" id="budget-modal">
     <div class="modal-container" style="max-width: 400px;">
       <div class="modal-header">
-        <h3 class="modal-title"><i data-lucide="settings"></i> Monthly Budget Limit</h3>
+        <h3 class="modal-title"><i data-lucide="settings"></i> App Settings</h3>
         <button class="modal-close" onclick="closeBudgetModal()"><i data-lucide="x"></i></button>
       </div>
       <div class="modal-body">
         <form id="budget-form" onsubmit="saveBudgetLimit(event)">
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label">Budget Amount (₹)</label>
+          <div class="form-group">
+            <label class="form-label">Monthly Budget Limit (₹)</label>
             <input type="number" step="1" id="budget-limit-input" class="form-control" placeholder="e.g. 3000" required>
+          </div>
+          
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Color Theme Mode</label>
+            <select id="theme-selector" class="form-control" onchange="changeTheme(this.value)">
+              <option value="cosmic">Cosmic Violet (Purple & Cyan)</option>
+              <option value="emerald">Emerald Mint (Green & Gold)</option>
+              <option value="cyberpunk">Cyberpunk Ruby (Pink & Orange)</option>
+              <option value="ocean">Ocean Breeze (Blue & Aqua)</option>
+              <option value="slate">Minimalist Slate (Slate & Blue)</option>
+            </select>
           </div>
         </form>
       </div>
@@ -522,6 +542,43 @@
         <button id="ocr-btn-action" disabled class="btn btn-accent" onclick="startScanner()">Start Extracting</button>
       </div>
     </div>
+  <!-- MODAL: GitHub Sync Settings -->
+  <div class="modal-overlay" id="sync-modal">
+    <div class="modal-container" style="max-width: 450px;">
+      <div class="modal-header">
+        <h3 class="modal-title"><i data-lucide="github"></i> GitHub Sync Settings</h3>
+        <button class="modal-close" onclick="closeSyncModal()"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="quick-insight" style="margin-bottom: 1.25rem; font-size: 0.75rem; border-left-color: var(--primary);">
+          <i data-lucide="shield-alert"></i>
+          <span>Your token is saved locally on this device and is only transmitted directly to GitHub's official secure REST API.</span>
+        </div>
+        <form id="sync-form" onsubmit="saveSyncSettings(event)">
+          <div class="form-group">
+            <label class="form-label">GitHub Username / Owner *</label>
+            <input type="text" id="sync-username" class="form-control" placeholder="e.g. johndoe" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Repository Name *</label>
+            <input type="text" id="sync-repo" class="form-control" placeholder="e.g. spendwise-data" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Personal Access Token (PAT) *</label>
+            <input type="password" id="sync-token" class="form-control" placeholder="ghp_..." required>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">File Path in Repo (Optional)</label>
+            <input type="text" id="sync-filepath" class="form-control" placeholder="data.json">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button onclick="disconnectSync()" class="btn btn-danger btn-sm" id="btn-disconnect-sync" style="display: none; margin-right: auto;"><i data-lucide="log-out"></i> Disconnect</button>
+        <button onclick="closeSyncModal()" class="btn btn-secondary">Cancel</button>
+        <button type="submit" form="sync-form" class="btn btn-primary">Connect & Sync</button>
+      </div>
+    </div>
   </div>
 
   <!-- Mobile Bottom Navigation Bar -->
@@ -549,5 +606,14 @@
 
   <!-- Scripts -->
   <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('Service Worker registered successfully:', reg.scope))
+          .catch(err => console.error('Service Worker registration failed:', err));
+      });
+    }
+  </script>
 </body>
 </html>

@@ -11,6 +11,15 @@ let charts = {};
 let currentView = 'dashboard';
 let activeOcrFile = null;
 let editingExpenseId = null;
+let syncSettings = {
+  username: '',
+  repo: '',
+  token: '',
+  filepath: 'data.json',
+  active: false
+};
+let syncSha = '';
+let activeTheme = 'cosmic';
 
 // Initial Seeding Data
 const DEFAULT_CATEGORIES = [
@@ -103,6 +112,11 @@ function dbDelete(storeName, key) {
 // 2. STATE INITIALIZATION & SEEDING
 // ----------------------------------------------------
 async function initializeApp() {
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('env') === 'desktop') {
+    document.body.classList.add('desktop-app');
+  }
+
   await initDB();
 
   // Load configuration/settings
@@ -113,6 +127,19 @@ async function initializeApp() {
   } else {
     await dbPut('settings', { key: 'budgetLimit', value: budgetLimit });
   }
+
+  // Load sync configuration
+  const syncConfig = settings.find(s => s.key === 'syncSettings');
+  if (syncConfig) {
+    syncSettings = syncConfig.value;
+  }
+
+  // Load active theme
+  const themeConfig = settings.find(s => s.key === 'activeTheme');
+  if (themeConfig) {
+    activeTheme = themeConfig.value;
+  }
+  changeTheme(activeTheme);
 
   // Load and seed categories
   categories = await dbGetAll('categories');
@@ -139,6 +166,14 @@ async function initializeApp() {
       await dbPut('recurring', rec);
     }
     recurringBills = await dbGetAll('recurring');
+  }
+
+  // If GitHub sync is active, perform pull
+  if (syncSettings && syncSettings.active) {
+    updateSyncBadge('syncing', 'Syncing...');
+    await fetchFromGitHub();
+  } else {
+    updateSyncBadge('offline', 'Local Mode');
   }
 
   // Process any due recurring expenses
@@ -231,6 +266,7 @@ async function checkRecurringExpenses() {
 
   if (updated) {
     transactions = await dbGetAll('expenses');
+    if (syncSettings.active) pushToGitHub();
   }
 }
 
@@ -615,6 +651,7 @@ async function addNewCategory() {
   populateCategorySelects();
   renderSidebarCategories();
   showToast(`Added category: "${name}"`, 'success');
+  if (syncSettings.active) pushToGitHub();
 }
 
 async function deleteCategory(id) {
@@ -623,6 +660,7 @@ async function deleteCategory(id) {
   populateCategorySelects();
   renderSidebarCategories();
   showToast('Category removed', 'warning');
+  if (syncSettings.active) pushToGitHub();
 }
 
 // Expense Manual Entry Actions
@@ -693,6 +731,7 @@ async function saveExpense(event) {
   closeExpenseModal();
   renderAllViews();
   updateCharts();
+  if (syncSettings.active) pushToGitHub();
 }
 
 async function deleteExpense(id) {
@@ -702,6 +741,7 @@ async function deleteExpense(id) {
     renderAllViews();
     updateCharts();
     showToast('Expense transaction deleted', 'warning');
+    if (syncSettings.active) pushToGitHub();
   }
 }
 
@@ -732,9 +772,11 @@ function suggestCategory() {
   }
 }
 
-// Budget Modal Actions
+// Settings Modal Actions
 function openBudgetModal() {
   document.getElementById('budget-limit-input').value = budgetLimit;
+  const selector = document.getElementById('theme-selector');
+  if (selector) selector.value = activeTheme;
   document.getElementById('budget-modal').classList.add('active');
 }
 
@@ -752,6 +794,33 @@ async function saveBudgetLimit(event) {
   closeBudgetModal();
   renderSidebarBudget();
   showToast(`Monthly budget limit set to ₹${limit}`, 'success');
+  if (syncSettings.active) pushToGitHub();
+}
+
+async function changeTheme(themeName) {
+  document.body.classList.remove('theme-cosmic', 'theme-emerald', 'theme-cyberpunk', 'theme-ocean', 'theme-slate');
+  document.body.classList.add('theme-' + themeName);
+  activeTheme = themeName;
+  
+  await dbPut('settings', { key: 'activeTheme', value: themeName });
+  
+  const selector = document.getElementById('theme-selector');
+  if (selector) {
+    selector.value = themeName;
+  }
+  
+  updateChartsColorTheme();
+}
+
+function updateChartsColorTheme() {
+  if (!charts.trend) return;
+  
+  const style = getComputedStyle(document.body);
+  const primary = style.getPropertyValue('--primary').trim();
+  
+  charts.trend.data.datasets[0].borderColor = primary;
+  charts.trend.data.datasets[0].backgroundColor = primary + '1a'; // 10% opacity
+  charts.trend.update();
 }
 
 // Recurring Modal Actions
@@ -793,6 +862,7 @@ async function saveRecurring(event) {
   closeRecurringModal();
   renderRecurringTable();
   showToast(`Scheduled bill: ${name}`, 'success');
+  if (syncSettings.active) pushToGitHub();
 }
 
 async function deleteRecurring(id) {
@@ -801,6 +871,7 @@ async function deleteRecurring(id) {
     recurringBills = recurringBills.filter(r => r.id !== id);
     renderRecurringTable();
     showToast('Recurring bill cancelled', 'warning');
+    if (syncSettings.active) pushToGitHub();
   }
 }
 
@@ -844,12 +915,10 @@ async function handleDrop(e, targetClass) {
     showToast(`Updated "${tx.merchant}" budget classification to ${targetClass.toUpperCase()}`, 'success');
     renderAllViews();
     updateCharts();
+    if (syncSettings.active) pushToGitHub();
   }
 }
 
-// ----------------------------------------------------
-// 6. OCR SCANNER HANDLERS
-// ----------------------------------------------------
 // ----------------------------------------------------
 // 6. OCR SCANNER HANDLERS
 // ----------------------------------------------------
@@ -1103,49 +1172,87 @@ function parseReceiptText(text) {
   let total = 0.00;
   let date = new Date().toISOString().split('T')[0];
 
-  // Try to find merchant name
+  // Try to find merchant name (first lines with clean letters)
   if (lines.length > 0) {
-    // Look at first few lines, take first that doesn't look like code or numbers
-    for (let i = 0; i < Math.min(4, lines.length); i++) {
-      if (!/\d/.test(lines[i]) && lines[i].length > 2) {
-        merchant = lines[i];
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const cleanLine = lines[i].replace(/[^a-zA-Z\s]/g, '').trim();
+      if (cleanLine.length > 3) {
+        merchant = cleanLine;
         break;
       }
     }
   }
 
-  // Search for currency/prices
-  const totalKeywords = /(?:total|grand\s*total|net|amount|due|payment|charge)/i;
-  const pricePattern = /\d+\.\d{2}/g;
+  // Expanded total keywords matching typical invoice/receipt footers
+  const totalKeywords = /(?:total|grand\s*total|net|amount|due|payment|charge|items|qty|invoice\s*value|value|taxable|val|inr|rs)/i;
+  
+  // Match numbers with optional decimal fractions (dot or comma)
+  const pricePattern = /\b\d+(?:[.,]\d{2})?\b/g;
   let possibleAmounts = [];
 
   for (let line of lines) {
-    const matches = line.match(pricePattern);
+    // Clean currency and special notations
+    const cleanLine = line.replace(/[₹$Rs.\-\/]/gi, ' ').trim();
+    const matches = cleanLine.match(pricePattern);
     if (matches) {
-      matches.forEach(m => possibleAmounts.push(parseFloat(m)));
+      matches.forEach(m => {
+        const val = parseFloat(m.replace(',', '.'));
+        if (!isNaN(val) && val > 0 && val < 200000) {
+          possibleAmounts.push(val);
+        }
+      });
     }
     
-    if (totalKeywords.test(line)) {
-      const numbers = line.match(/\d+\.\d{2}/);
-      if (numbers) {
-        total = parseFloat(numbers[0]);
+    // Scan keyword matched lines for potential total amounts
+    if (totalKeywords.test(cleanLine)) {
+      const lineMatches = cleanLine.match(/\b\d+(?:[.,]\d{2})?\b/g);
+      if (lineMatches) {
+        lineMatches.forEach(m => {
+          const val = parseFloat(m.replace(',', '.'));
+          // Take the largest value on total lines
+          if (val > total && val < 200000) {
+            total = val;
+          }
+        });
       }
     }
   }
 
-  // Fallback to max amount
+  // Fallback 1: If no total keyword matched, take the maximum matched price
   if (total === 0 && possibleAmounts.length > 0) {
     total = Math.max(...possibleAmounts);
   }
+  
+  // Fallback 2: Handle specific grocery receipt formats: "Items: XX Qty: YY TOTAL_AMOUNT"
+  if (total === 0 || total < 10) { // Check if total is suspiciously low
+    for (let line of lines) {
+      if (/items|qty/i.test(line)) {
+        const numbers = line.match(/\d+(?:[.,]\d{2})?/g);
+        if (numbers && numbers.length >= 2) {
+          const lastNum = parseFloat(numbers[numbers.length - 1].replace(',', '.'));
+          if (lastNum > total && lastNum < 200000) {
+            total = lastNum;
+          }
+        }
+      }
+    }
+  }
 
-  // Date parsing
+  // Date parsing with support for DD/MM/YYYY and YYYY-MM-DD
   const datePattern = /(\d{4}[-/]\d{2}[-/]\d{2})|(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/g;
   for (let line of lines) {
     const match = line.match(datePattern);
     if (match) {
       try {
         const rawDate = match[0].replace(/\//g, '-');
-        const parsed = new Date(rawDate);
+        const parts = rawDate.split('-');
+        let parsed = new Date(rawDate);
+        
+        // Handle DD-MM-YYYY format
+        if (parts.length === 3 && parts[0].length <= 2 && parts[2].length === 4) {
+          parsed = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+        }
+        
         if (!isNaN(parsed)) {
           date = parsed.toISOString().split('T')[0];
           break;
@@ -1264,29 +1371,32 @@ function getTrendChartData() {
     amounts.push(dayTotal);
   }
 
-  // Cyan gradient for trend fill
+  // Theme-aware gradient for trend fill
+  const style = getComputedStyle(document.body);
+  const primary = style.getPropertyValue('--primary').trim() || '#9d4edd';
+  
   let gradient = null;
   const canvas = document.getElementById('trendChart');
   if (canvas) {
     const ctx = canvas.getContext('2d');
     gradient = ctx.createLinearGradient(0, 0, 0, 300);
-    gradient.addColorStop(0, 'rgba(6, 182, 212, 0.25)');
-    gradient.addColorStop(1, 'rgba(6, 182, 212, 0.00)');
+    gradient.addColorStop(0, primary + '40'); // 25% opacity
+    gradient.addColorStop(1, primary + '00'); // 0% opacity
   }
 
   return {
     labels: dates,
     datasets: [{
-      label: 'Daily Spending ($)',
+      label: 'Daily Spending (₹)',
       data: amounts,
-      borderColor: '#06b6d4',
+      borderColor: primary,
       borderWidth: 3,
-      backgroundColor: gradient || 'rgba(6, 182, 212, 0.05)',
+      backgroundColor: gradient || (primary + '0d'),
       fill: true,
       tension: 0.35,
       pointRadius: 3,
       pointHoverRadius: 6,
-      pointBackgroundColor: '#06b6d4'
+      pointBackgroundColor: primary
     }]
   };
 }
@@ -1312,7 +1422,6 @@ function exportData() {
   a.href = url;
   a.download = `spendwise_backup_${new Date().toISOString().split('T')[0]}.json`;
   a.click();
-  
   showToast('Backups downloaded as JSON file', 'success');
 }
 
@@ -1325,56 +1434,462 @@ function importData(event) {
   if (!file) return;
 
   const reader = new FileReader();
+  const fileType = file.name.split('.').pop().toLowerCase();
+
   reader.onload = async (e) => {
     try {
-      const data = JSON.parse(e.target.result);
-      if (!data.transactions || !data.categories || !data.recurringBills) {
-        showToast('Invalid backup file structure.', 'error');
-        return;
-      }
+      const text = e.target.result;
 
-      // Confirm
-      if (!confirm('This will overwrite all active transactions and categories with values in backup file. Continue?')) {
-        return;
-      }
+      if (fileType === 'csv') {
+        const parsedCsv = parseCSV(text);
+        if (parsedCsv.length === 0) {
+          return; // Message already shown by parseCSV
+        }
 
-      // Clear DB
-      const clearTx = db.transaction(['expenses', 'categories', 'recurring', 'settings'], 'readwrite');
-      clearTx.objectStore('expenses').clear();
-      clearTx.objectStore('categories').clear();
-      clearTx.objectStore('recurring').clear();
-      clearTx.objectStore('settings').clear();
+        if (!confirm(`Found ${parsedCsv.length} transaction entries in this Excel CSV. Append them to your active database?`)) {
+          return;
+        }
 
-      // Put new values
-      for (const cat of data.categories) {
-        await dbPut('categories', cat);
-      }
-      for (const tx of data.transactions) {
-        await dbPut('expenses', tx);
-      }
-      for (const rec of data.recurringBills) {
-        await dbPut('recurring', rec);
-      }
-      
-      const bLimit = data.budgetLimit || 3000;
-      await dbPut('settings', { key: 'budgetLimit', value: bLimit });
+        // Add to database and local memory (Merge)
+        const tx = db.transaction(['expenses'], 'readwrite');
+        const store = tx.objectStore('expenses');
+        for (const item of parsedCsv) {
+          store.put(item);
+          transactions.push(item);
+        }
+        
+        tx.oncomplete = () => {
+          renderAllViews();
+          updateCharts();
+          showToast(`Successfully imported ${parsedCsv.length} records from Excel!`, 'success');
+          if (syncSettings.active) pushToGitHub();
+        };
+        
+      } else {
+        // Standard JSON Restore
+        const data = JSON.parse(text);
+        if (!data.transactions || !data.categories || !data.recurringBills) {
+          showToast('Invalid backup file structure.', 'error');
+          return;
+        }
 
-      // Refresh memory
-      transactions = data.transactions;
-      categories = data.categories;
-      recurringBills = data.recurringBills;
-      budgetLimit = bLimit;
+        if (!confirm('This will overwrite all active transactions and categories with values in backup file. Continue?')) {
+          return;
+        }
 
-      renderAllViews();
-      populateCategorySelects();
-      updateCharts();
-      showToast('Restore backup successful!', 'success');
+        // Clear DB then write new values in a single transaction
+        await new Promise((resolve, reject) => {
+          const restoreTx = db.transaction(['expenses', 'categories', 'recurring', 'settings'], 'readwrite');
+          restoreTx.objectStore('expenses').clear();
+          restoreTx.objectStore('categories').clear();
+          restoreTx.objectStore('recurring').clear();
+          restoreTx.objectStore('settings').clear();
+
+          // Put new values into the same transaction
+          for (const cat of data.categories) {
+            restoreTx.objectStore('categories').put(cat);
+          }
+          for (const t of data.transactions) {
+            restoreTx.objectStore('expenses').put(t);
+          }
+          for (const rec of data.recurringBills) {
+            restoreTx.objectStore('recurring').put(rec);
+          }
+          
+          const bLimit = data.budgetLimit || 3000;
+          restoreTx.objectStore('settings').put({ key: 'budgetLimit', value: bLimit });
+
+          restoreTx.oncomplete = () => resolve(bLimit);
+          restoreTx.onerror = () => reject(restoreTx.error);
+        }).then(bLimit => {
+          // Refresh memory
+          transactions = data.transactions;
+          categories = data.categories;
+          recurringBills = data.recurringBills;
+          budgetLimit = bLimit;
+
+          renderAllViews();
+          populateCategorySelects();
+          updateCharts();
+          showToast('Restore backup successful!', 'success');
+          if (syncSettings.active) pushToGitHub();
+        });
+      }
     } catch (err) {
       console.error(err);
-      showToast('Error importing JSON data.', 'error');
+      showToast('Error parsing file contents.', 'error');
     }
   };
   reader.readAsText(file);
+  // Reset input so re-importing the same file triggers onchange
+  event.target.value = '';
+}
+
+function exportToCSV() {
+  if (transactions.length === 0) {
+    showToast('No transaction logs to export.', 'warning');
+    return;
+  }
+
+  // Headers
+  const headers = ['Date', 'Merchant', 'Category', 'Budget Class', 'Amount (₹)', 'Notes'];
+  
+  // Format cells
+  const rows = transactions.map(tx => [
+    tx.date,
+    `"${tx.merchant.replace(/"/g, '""')}"`,
+    `"${tx.category.replace(/"/g, '""')}"`,
+    tx.class.toUpperCase(),
+    tx.amount.toFixed(2),
+    `"${(tx.notes || '').replace(/"/g, '""')}"`
+  ]);
+
+  // Combine rows, prepend UTF-8 BOM byte sequence
+  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `spendwise_expenses_${new Date().toISOString().split('T')[0]}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  showToast('Excel CSV download complete!', 'success');
+}
+
+function parseCSV(text) {
+  const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+  if (lines.length < 2) return [];
+
+  // Parse headers by removing symbols
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/["'\s₹$()]/g, ''));
+  
+  const dateIdx = headers.findIndex(h => h.includes('date'));
+  const merchantIdx = headers.findIndex(h => h.includes('merchant') || h.includes('title') || h.includes('payee') || h.includes('name'));
+  const amountIdx = headers.findIndex(h => h.includes('amount') || h.includes('price') || h.includes('value'));
+  const categoryIdx = headers.findIndex(h => h.includes('category') || h.includes('type'));
+  const classIdx = headers.findIndex(h => h.includes('class') || h.includes('budget'));
+  const notesIdx = headers.findIndex(h => h.includes('note') || h.includes('desc'));
+
+  if (dateIdx === -1 || merchantIdx === -1 || amountIdx === -1) {
+    showToast('CSV must include at least: Date, Merchant, and Amount columns.', 'error');
+    return [];
+  }
+
+  const parsedItems = [];
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseCSVLine(lines[i]);
+    if (row.length <= Math.max(dateIdx, merchantIdx, amountIdx)) continue;
+
+    const dateVal = row[dateIdx] ? row[dateIdx].trim() : new Date().toISOString().split('T')[0];
+    const merchantVal = row[merchantIdx] ? row[merchantIdx].trim() : 'Unknown Merchant';
+    const amountVal = parseFloat(row[amountIdx] ? row[amountIdx].replace(/[^\d.]/g, '') : '0');
+    
+    let categoryVal = categoryIdx !== -1 && row[categoryIdx] ? row[categoryIdx].trim() : 'Miscellaneous';
+    let classVal = classIdx !== -1 && row[classIdx] ? row[classIdx].trim().toLowerCase() : 'need';
+    if (!['need', 'want', 'saving'].includes(classVal)) {
+      classVal = 'need';
+    }
+    const notesVal = notesIdx !== -1 && row[notesIdx] ? row[notesIdx].trim() : '';
+
+    if (isNaN(amountVal) || amountVal <= 0) continue;
+
+    parsedItems.push({
+      id: 't-csv-' + Date.now() + '-' + i,
+      merchant: merchantVal,
+      amount: amountVal,
+      date: dateVal,
+      category: categoryVal,
+      class: classVal,
+      notes: notesVal
+    });
+  }
+  return parsedItems;
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+// ----------------------------------------------------
+// 9. GITHUB STORAGE SYNC
+// ----------------------------------------------------
+function openSyncModal() {
+  document.getElementById('sync-username').value = syncSettings.username || '';
+  document.getElementById('sync-repo').value = syncSettings.repo || '';
+  document.getElementById('sync-token').value = syncSettings.token || '';
+  document.getElementById('sync-filepath').value = syncSettings.filepath || 'data.json';
+  
+  const disconnectBtn = document.getElementById('btn-disconnect-sync');
+  if (syncSettings.active) {
+    disconnectBtn.style.display = 'block';
+  } else {
+    disconnectBtn.style.display = 'none';
+  }
+
+  document.getElementById('sync-modal').classList.add('active');
+}
+
+function closeSyncModal() {
+  document.getElementById('sync-modal').classList.remove('active');
+}
+
+function updateSyncBadge(status, text) {
+  const badge = document.getElementById('sync-status-badge');
+  if (!badge) return;
+
+  badge.className = `sync-badge ${status}`;
+  document.getElementById('sync-status-text').innerText = text;
+}
+
+async function saveSyncSettings(event) {
+  event.preventDefault();
+  
+  const username = document.getElementById('sync-username').value.trim();
+  const repo = document.getElementById('sync-repo').value.trim();
+  const token = document.getElementById('sync-token').value.trim();
+  const filepath = document.getElementById('sync-filepath').value.trim() || 'data.json';
+
+  updateSyncBadge('syncing', 'Connecting...');
+  
+  const tempSettings = { username, repo, token, filepath, active: true };
+  
+  try {
+    const success = await testAndFetchGitHub(tempSettings);
+    if (success) {
+      syncSettings = tempSettings;
+      await dbPut('settings', { key: 'syncSettings', value: syncSettings });
+      showToast('GitHub Sync Connected Successfully!', 'success');
+      closeSyncModal();
+    } else {
+      updateSyncBadge('failed', 'Sync Failed');
+      showToast('Failed to connect to repository. Verify credentials.', 'error');
+    }
+  } catch (err) {
+    console.error(err);
+    updateSyncBadge('failed', 'Sync Failed');
+    showToast('Failed to connect. Ensure your token is valid.', 'error');
+  }
+}
+
+async function disconnectSync() {
+  if (confirm('Disconnect from GitHub Sync? Your data will remain stored in local browser, but will not sync across other devices.')) {
+    syncSettings = { username: '', repo: '', token: '', filepath: 'data.json', active: false };
+    syncSha = '';
+    await dbPut('settings', { key: 'syncSettings', value: syncSettings });
+    updateSyncBadge('offline', 'Local Mode');
+    showToast('Disconnected from GitHub Sync.', 'warning');
+    closeSyncModal();
+  }
+}
+
+async function fetchFromGitHub() {
+  if (!syncSettings.active) return;
+  
+  const { username, repo, token, filepath } = syncSettings;
+  const url = `https://api.github.com/repos/${username}/${repo}/contents/${filepath}`;
+
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (res.status === 200) {
+      const dataJson = await res.json();
+      syncSha = dataJson.sha;
+      
+      const base64 = dataJson.content.replace(/\s/g, '');
+      const decodedString = decodeURIComponent(escape(atob(base64)));
+      const data = JSON.parse(decodedString);
+
+      if (data.transactions && data.categories) {
+        const tx = db.transaction(['expenses', 'categories', 'recurring', 'settings'], 'readwrite');
+        tx.objectStore('expenses').clear();
+        tx.objectStore('categories').clear();
+        tx.objectStore('recurring').clear();
+
+        for (const cat of data.categories) {
+          tx.objectStore('categories').put(cat);
+        }
+        for (const t of data.transactions) {
+          tx.objectStore('expenses').put(t);
+        }
+        if (data.recurringBills) {
+          for (const rec of data.recurringBills) {
+            tx.objectStore('recurring').put(rec);
+          }
+        }
+        
+        budgetLimit = data.budgetLimit || 3000;
+        tx.objectStore('settings').put({ key: 'budgetLimit', value: budgetLimit });
+
+        tx.oncomplete = () => {
+          transactions = data.transactions;
+          categories = data.categories;
+          recurringBills = data.recurringBills || [];
+          
+          renderAllViews();
+          populateCategorySelects();
+          updateCharts();
+          updateSyncBadge('synced', 'Synced');
+        };
+      }
+    } else if (res.status === 404) {
+      updateSyncBadge('syncing', 'Initializing...');
+      await pushToGitHub();
+    } else {
+      updateSyncBadge('failed', 'Sync Failed');
+      showToast('Error syncing with GitHub repository.', 'error');
+    }
+  } catch (err) {
+    console.error('GitHub fetch failed:', err);
+    updateSyncBadge('failed', 'Offline Mode');
+  }
+}
+
+async function pushToGitHub() {
+  if (!syncSettings.active) return;
+  
+  const { username, repo, token, filepath } = syncSettings;
+  const url = `https://api.github.com/repos/${username}/${repo}/contents/${filepath}`;
+  
+  updateSyncBadge('syncing', 'Syncing...');
+
+  const payload = {
+    transactions,
+    categories,
+    recurringBills,
+    budgetLimit,
+    lastSyncedAt: new Date().toISOString()
+  };
+
+  const jsonString = JSON.stringify(payload);
+  const base64Content = btoa(unescape(encodeURIComponent(jsonString)));
+
+  const requestBody = {
+    message: 'sync: update SpendWise transactions log',
+    content: base64Content
+  };
+
+  if (syncSha) {
+    requestBody.sha = syncSha;
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (res.status === 200 || res.status === 201) {
+      const dataJson = await res.json();
+      syncSha = dataJson.content.sha;
+      updateSyncBadge('synced', 'Synced');
+    } else {
+      if (res.status === 409) {
+        console.warn('SHA conflict. Pulling latest remote state to resolve conflict.');
+        await fetchFromGitHub();
+      } else {
+        updateSyncBadge('failed', 'Sync Failed');
+        showToast('Push to GitHub failed.', 'error');
+      }
+    }
+  } catch (err) {
+    console.error('GitHub push failed:', err);
+    updateSyncBadge('failed', 'Sync Failed');
+  }
+}
+
+async function testAndFetchGitHub(settingsObj) {
+  const { username, repo, token, filepath } = settingsObj;
+  const url = `https://api.github.com/repos/${username}/${repo}/contents/${filepath}`;
+
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github+json'
+      }
+    });
+
+    if (res.status === 200) {
+      const dataJson = await res.json();
+      syncSha = dataJson.sha;
+      const base64 = dataJson.content.replace(/\s/g, '');
+      const decodedString = decodeURIComponent(escape(atob(base64)));
+      const data = JSON.parse(decodedString);
+
+      const tx = db.transaction(['expenses', 'categories', 'recurring', 'settings'], 'readwrite');
+      tx.objectStore('expenses').clear();
+      tx.objectStore('categories').clear();
+      tx.objectStore('recurring').clear();
+
+      for (const cat of data.categories) {
+        tx.objectStore('categories').put(cat);
+      }
+      for (const t of data.transactions) {
+        tx.objectStore('expenses').put(t);
+      }
+      if (data.recurringBills) {
+        for (const rec of data.recurringBills) {
+          tx.objectStore('recurring').put(rec);
+        }
+      }
+      budgetLimit = data.budgetLimit || 3000;
+      tx.objectStore('settings').put({ key: 'budgetLimit', value: budgetLimit });
+
+      await new Promise((resolve) => {
+        tx.oncomplete = () => {
+          transactions = data.transactions;
+          categories = data.categories;
+          recurringBills = data.recurringBills || [];
+          
+          renderAllViews();
+          populateCategorySelects();
+          updateCharts();
+          updateSyncBadge('synced', 'Synced');
+          resolve();
+        };
+      });
+      return true;
+    } else if (res.status === 404) {
+      syncSettings = settingsObj;
+      await pushToGitHub();
+      return true;
+    }
+  } catch (err) {
+    console.error('Connection test failed:', err);
+  }
+  return false;
 }
 
 async function resetDatabase() {
@@ -1385,7 +1900,16 @@ async function resetDatabase() {
     tx.objectStore('recurring').clear();
     tx.objectStore('settings').clear();
     
-    tx.oncomplete = () => {
+    tx.oncomplete = async () => {
+      transactions = [];
+      categories = [];
+      recurringBills = [];
+      budgetLimit = 3000;
+
+      if (syncSettings.active) {
+        await pushToGitHub();
+      }
+
       showToast('Database wiped clean. Reloading...', 'warning');
       setTimeout(() => location.reload(), 1000);
     };

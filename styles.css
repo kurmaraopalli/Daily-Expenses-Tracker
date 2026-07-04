@@ -1285,3 +1285,193 @@ tr:hover td {
     flex-direction: column;
   }
 }
+
+/* GitHub Sync Status Badge Styles */
+.sync-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(22, 26, 37, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-bottom: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.sync-badge:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(157, 78, 221, 0.3);
+}
+
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: relative;
+  display: inline-block;
+}
+
+.sync-badge.offline .sync-dot {
+  background-color: var(--warning);
+  box-shadow: 0 0 8px var(--warning);
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+.sync-badge.syncing .sync-dot {
+  background-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse-dot 0.8s infinite ease-in-out;
+}
+
+.sync-badge.synced .sync-dot {
+  background-color: var(--success);
+  box-shadow: 0 0 8px var(--success);
+}
+
+.sync-badge.failed .sync-dot {
+  background-color: var(--danger);
+  box-shadow: 0 0 8px var(--danger);
+  animation: flash-dot 0.5s infinite alternate;
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.9); opacity: 0.6; }
+  50% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.6; }
+}
+
+@keyframes flash-dot {
+  from { opacity: 0.3; }
+  to { opacity: 1; }
+}
+
+/* Desktop-App Color Overrides */
+body.desktop-app {
+  --bg-primary: #050608;
+  --bg-secondary: #0a0c12;
+  --bg-tertiary: #10131b;
+  --card-bg: rgba(14, 18, 30, 0.45);
+  --card-border: rgba(129, 140, 248, 0.14); /* Radiant Indigo Glass border */
+  --primary: #818cf8; /* Royal Indigo */
+  --primary-hover: #6366f1;
+  --primary-light: rgba(129, 140, 248, 0.15);
+  
+  background-image: 
+    radial-gradient(circle at 100% 0%, rgba(244, 63, 94, 0.15) 0%, transparent 45%),
+    radial-gradient(circle at 0% 100%, rgba(99, 102, 241, 0.18) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(129, 140, 248, 0.04) 0%, transparent 65%);
+}
+
+body.desktop-app aside {
+  border-color: rgba(129, 140, 248, 0.16);
+  background: rgba(10, 13, 22, 0.5);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+}
+
+body.desktop-app .card {
+  border-color: rgba(129, 140, 248, 0.12);
+}
+
+body.desktop-app .card:hover {
+  border-color: rgba(129, 140, 248, 0.35);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4), 0 0 20px rgba(129, 140, 248, 0.1);
+}
+
+body.desktop-app .btn-primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  box-shadow: 0 4px 15px -3px rgba(99, 102, 241, 0.4);
+}
+
+body.desktop-app .btn-primary:hover {
+  box-shadow: 0 8px 20px -3px rgba(99, 102, 241, 0.5);
+}
+
+body.desktop-app .nav-link.active {
+  background: linear-gradient(90deg, rgba(129, 140, 248, 0.12), transparent);
+  border-left-color: var(--primary);
+  color: var(--primary);
+}
+
+body.desktop-app .form-control {
+  border-color: rgba(129, 140, 248, 0.1);
+}
+
+body.desktop-app .form-control:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+}
+
+/* Color Theme Modes Variable Overrides */
+body.theme-cosmic {
+  --primary: #9d4edd;
+  --primary-hover: #7b2cbf;
+  --primary-light: rgba(157, 78, 221, 0.15);
+  --accent: #00f5ff;
+  --accent-hover: #00d2eb;
+  --accent-light: rgba(0, 245, 255, 0.15);
+}
+
+body.theme-emerald {
+  --primary: #05ffc4;
+  --primary-hover: #00e0a8;
+  --primary-light: rgba(5, 255, 196, 0.15);
+  --accent: #ffaa00;
+  --accent-hover: #e09500;
+  --accent-light: rgba(255, 170, 0, 0.15);
+}
+body.theme-emerald:not(.desktop-app) {
+  background-image: 
+    radial-gradient(circle at 0% 0%, rgba(5, 255, 196, 0.18) 0%, transparent 45%),
+    radial-gradient(circle at 100% 100%, rgba(255, 170, 0, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(5, 255, 196, 0.03) 0%, transparent 60%);
+}
+
+body.theme-cyberpunk {
+  --primary: #ff2a6d;
+  --primary-hover: #d91b53;
+  --primary-light: rgba(255, 42, 109, 0.15);
+  --accent: #ff9e00;
+  --accent-hover: #e08b00;
+  --accent-light: rgba(255, 158, 0, 0.15);
+}
+body.theme-cyberpunk:not(.desktop-app) {
+  background-image: 
+    radial-gradient(circle at 0% 0%, rgba(255, 42, 109, 0.18) 0%, transparent 45%),
+    radial-gradient(circle at 100% 100%, rgba(255, 158, 0, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(255, 42, 109, 0.03) 0%, transparent 60%);
+}
+
+body.theme-ocean {
+  --primary: #0088ff;
+  --primary-hover: #0066cc;
+  --primary-light: rgba(0, 136, 255, 0.15);
+  --accent: #00f5ff;
+  --accent-hover: #00d2eb;
+  --accent-light: rgba(0, 245, 255, 0.15);
+}
+body.theme-ocean:not(.desktop-app) {
+  background-image: 
+    radial-gradient(circle at 0% 0%, rgba(0, 136, 255, 0.18) 0%, transparent 45%),
+    radial-gradient(circle at 100% 100%, rgba(0, 245, 255, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(0, 136, 255, 0.03) 0%, transparent 60%);
+}
+
+body.theme-slate {
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-light: rgba(79, 70, 229, 0.12);
+  --accent: #64748b;
+  --accent-hover: #475569;
+  --accent-light: rgba(100, 116, 139, 0.12);
+}
+body.theme-slate:not(.desktop-app) {
+  background-image: 
+    radial-gradient(circle at 0% 0%, rgba(79, 70, 229, 0.1) 0%, transparent 45%),
+    radial-gradient(circle at 100% 100%, rgba(100, 116, 139, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(79, 70, 229, 0.02) 0%, transparent 60%);
+}
